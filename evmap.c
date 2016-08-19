@@ -158,12 +158,16 @@ void evmap_io_clear_(struct event_io_map *ctx)
 /* Set the variable 'x' to the field in event_map 'map' with fields of type
    'struct type *' corresponding to the fd or signal 'slot'.  Set 'x' to NULL
    if there are no entries for 'slot'.  Does no bounds-checking. */
+   /* 利用fd作为key，作为数组下标 */
 #define GET_SIGNAL_SLOT(x, map, slot, type)			\
 	(x) = (struct type *)((map)->entries[slot])
 /* As GET_SLOT, but construct the entry for 'slot' if it is not present,
    by allocating enough memory for a 'struct type', and initializing the new
    value by calling the function 'ctor' on it.  Makes the function
    return -1 on allocation failure.
+ */
+ /*
+以sig为下标，对应内容为evmap_signal+fd内容
  */
 #define GET_SIGNAL_SLOT_AND_CTOR(x, map, slot, type, ctor, fdinfo_len)	\
 	do {								\
@@ -327,7 +331,8 @@ evmap_io_add_(struct event_base *base, evutil_socket_t fd, struct event *ev)
 		/* XXX(niels): we cannot mix edge-triggered and
 		 * level-triggered, we should probably assert on
 		 * this. */
-		if (evsel->add(base, ev->ev_fd,
+		 /* 以epoll为例，加入epoll */
+		if (evsel->add(base, ev->ev_fd, 
 			old, (ev->ev_events & EV_ET) | res, extra) == -1)
 			return (-1);
 		retval = 1;
@@ -407,7 +412,9 @@ evmap_io_del_(struct event_base *base, evutil_socket_t fd, struct event *ev)
 
 	return (retval);
 }
-
+/*
+io事件就绪，将io对应fd(handle)关联的事件激活，准备事件回调处理
+*/
 void
 evmap_io_active_(struct event_base *base, evutil_socket_t fd, short events)
 {

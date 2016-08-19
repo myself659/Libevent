@@ -53,9 +53,9 @@ extern "C" {
 
 /* For evkeyvalq */
 #include <event2/keyvalq_struct.h>
-
+/* 事件类型 */
 #define EVLIST_TIMEOUT	    0x01
-#define EVLIST_INSERTED	    0x02
+#define EVLIST_INSERTED	    0x02  /*  */
 #define EVLIST_SIGNAL	    0x04
 #define EVLIST_ACTIVE	    0x08
 #define EVLIST_INTERNAL	    0x10
@@ -116,19 +116,19 @@ struct event_callback {
 		void (*evcb_evfinalize)(struct event *, void *);
 		void (*evcb_cbfinalize)(struct event_callback *, void *);
 	} evcb_cb_union;
-	void *evcb_arg;
+	void *evcb_arg; /*  回调参数  */
 };
 
 struct event_base;
-struct event {
-	struct event_callback ev_evcallback;
+struct event {   /* 事件 */
+	struct event_callback ev_evcallback; /* 事件回调 */
 
 	/* for managing timeouts */
 	union {
 		TAILQ_ENTRY(event) ev_next_with_common_timeout;
-		int min_heap_idx;
+		int min_heap_idx; /* 应用定时器堆中的位置 */
 	} ev_timeout_pos;
-	evutil_socket_t ev_fd;
+	evutil_socket_t ev_fd; /* 一切旨fd，一切皆文件  */
 
 	struct event_base *ev_base;
 

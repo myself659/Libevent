@@ -160,6 +160,9 @@ struct event_signal_map {
  * events waiting for a timeout wait on a minheap.  Sometimes, however, a
  * queue can be faster.
  **/
+ /*
+驱动定时器，用于驱动应用定时器  
+ */
 struct common_timeout_list {
 	/* List of events currently waiting in the queue. */
 	struct event_list events;
@@ -205,7 +208,7 @@ struct event_once {
 	void *arg;
 };
 
-struct event_base {
+struct event_base { /* 事件管理实例  */
 	/** Function pointers and other data to describe this event_base's
 	 * backend. */
 	const struct eventop *evsel;
@@ -261,11 +264,14 @@ struct event_base {
 	 * that have triggered, and whose callbacks need to be called).  Low
 	 * priority numbers are more important, and stall higher ones.
 	 */
+	  /* 回调处理的队列，支持优先级 */  
 	struct evcallback_list *activequeues;
 	/** The length of the activequeues array */
 	int nactivequeues;
 	/** A list of event_callbacks that should become active the next time
 	 * we process events, but not this time. */
+
+	 /* 延迟队列 */
 	struct evcallback_list active_later_queue;
 
 	/* common timeout logic */
@@ -274,7 +280,7 @@ struct event_base {
 	 * values we know. */
 	struct common_timeout_list **common_timeout_queues;
 	/** The number of entries used in common_timeout_queues */
-	int n_common_timeouts;
+	int n_common_timeouts;  /* 驱动定时器个数 */
 	/** The total size of common_timeout_queues. */
 	int n_common_timeouts_allocated;
 

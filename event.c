@@ -97,7 +97,7 @@ extern const struct eventop win32ops;
 #endif
 
 /* Array of backends in order of preference. */
-static const struct eventop *eventops[] = {
+static const struct eventop *eventops[] = { /* 全局数组 保存I/O demultiplex机制 */
 #ifdef EVENT__HAVE_EVENT_PORTS
 	&evportops,
 #endif
@@ -1415,6 +1415,9 @@ common_timeout_schedule(struct common_timeout_list *ctl,
 /* Callback: invoked when the timeout for a common timeout queue triggers.
  * This means that (at least) the first event in that queue should be run,
  * and the timeout should be rescheduled if there are more events. */
+ /*
+驱动定时器回调处理 
+ */
 static void
 common_timeout_callback(evutil_socket_t fd, short what, void *arg)
 {
@@ -1426,7 +1429,8 @@ common_timeout_callback(evutil_socket_t fd, short what, void *arg)
 	gettime(base, &now);
 	while (1) {
 		ev = TAILQ_FIRST(&ctl->events);
-		if (!ev || ev->ev_timeout.tv_sec > now.tv_sec ||
+		/* 判断是否超时 */
+		if (!ev || ev->ev_timeout.tv_sec > now.tv_sec || 
 		    (ev->ev_timeout.tv_sec == now.tv_sec &&
 			(ev->ev_timeout.tv_usec&MICROSECONDS_MASK) > now.tv_usec))
 			break;
@@ -1440,9 +1444,12 @@ common_timeout_callback(evutil_socket_t fd, short what, void *arg)
 
 #define MAX_COMMON_TIMEOUTS 256
 
+/*
+创建驱动定时器 
+*/
 const struct timeval *
 event_base_init_common_timeout(struct event_base *base,
-    const struct timeval *duration)
+    const struct timeval *duration) 
 {
 	int i;
 	struct timeval tv;
@@ -1498,6 +1505,7 @@ event_base_init_common_timeout(struct event_base *base,
 	new_ctl->duration.tv_usec =
 	    duration->tv_usec | COMMON_TIMEOUT_MAGIC |
 	    (base->n_common_timeouts << COMMON_TIMEOUT_IDX_SHIFT);
+	 /* 事件 事件管理实例 回调函数 回调参数 */
 	evtimer_assign(&new_ctl->timeout_event, base,
 	    common_timeout_callback, new_ctl);
 	new_ctl->timeout_event.ev_flags |= EVLIST_INTERNAL;
@@ -1624,7 +1632,7 @@ event_process_active_single_queue(struct event_base *base,
 			++count;
 
 
-		base->current_event = evcb;
+		base->current_event = evcb; /* 为什么要记录当前事件 */
 #ifndef EVENT__DISABLE_THREAD_SUPPORT
 		base->current_event_waiters = 0;
 #endif
@@ -1643,7 +1651,7 @@ event_process_active_single_queue(struct event_base *base,
 			EVUTIL_ASSERT(ev != NULL);
 			evcb_callback = *ev->ev_callback;
 			EVBASE_RELEASE_LOCK(base, th_base_lock);
-			evcb_callback(ev->ev_fd, ev->ev_res, ev->ev_arg);
+			evcb_callback(ev->ev_fd, ev->ev_res, ev->ev_arg);  /* 执行回调处理 */
 		}
 		break;
 		case EV_CLOSURE_CB_SELF: {
@@ -1710,7 +1718,9 @@ event_process_active_single_queue(struct event_base *base,
  * process before higher priorities.  Low priority events can starve high
  * priority ones.
  */
-
+/* 
+处理激活事件 
+*/
 static int
 event_process_active(struct event_base *base)
 {
@@ -1921,7 +1931,7 @@ event_base_loop(struct event_base *base, int flags)
 			break;
 		}
 
-		tv_p = &tv;
+		tv_p = &tv; /* dispatch 最大等待时间 */
 		if (!N_ACTIVE_CALLBACKS(base) && !(flags & EVLOOP_NONBLOCK)) {
 			timeout_next(base, &tv_p);
 		} else {
@@ -1944,7 +1954,7 @@ event_base_loop(struct event_base *base, int flags)
 
 		clear_time_cache(base);
 
-		res = evsel->dispatch(base, tv_p);
+		res = evsel->dispatch(base, tv_p); /* 等待就绪IO事件分发事件，例如调用epoll_wait */
 
 		if (res == -1) {
 			event_debug(("%s: dispatch returned unsuccessfully.",
@@ -1955,7 +1965,7 @@ event_base_loop(struct event_base *base, int flags)
 
 		update_time_cache(base);
 
-		timeout_process(base);
+		timeout_process(base); 
 
 		if (N_ACTIVE_CALLBACKS(base)) {
 			int n = event_process_active(base);
@@ -2061,6 +2071,7 @@ event_base_once(struct event_base *base, evutil_socket_t fd, short events,
 	return (0);
 }
 
+/* 添加事件 */
 int
 event_assign(struct event *ev, struct event_base *base, evutil_socket_t fd, short events, void (*callback)(evutil_socket_t, short, void *), void *arg)
 {
@@ -2488,15 +2499,15 @@ evthread_notify_base_eventfd(struct event_base *base)
  * needs to stop waiting in its dispatch function (if it is) and process all
  * active callbacks. */
 static int
-evthread_notify_base(struct event_base *base)
+evthread_notify_base(struct event_base *base) /* */
 {
 	EVENT_BASE_ASSERT_LOCKED(base);
 	if (!base->th_notify_fn)
 		return -1;
 	if (base->is_notify_pending)
 		return 0;
-	base->is_notify_pending = 1;
-	return base->th_notify_fn(base);
+	base->is_notify_pending = 1; /* 表示有未处理的通知 */
+	return base->th_notify_fn(base); /* wakeup其他线程  */
 }
 
 /* Implementation function to remove a timeout on a currently pending event.
@@ -2597,9 +2608,9 @@ event_add_nolock_(struct event *ev, const struct timeval *tv,
 	if ((ev->ev_events & (EV_READ|EV_WRITE|EV_CLOSED|EV_SIGNAL)) &&
 	    !(ev->ev_flags & (EVLIST_INSERTED|EVLIST_ACTIVE|EVLIST_ACTIVE_LATER))) {
 		if (ev->ev_events & (EV_READ|EV_WRITE|EV_CLOSED))
-			res = evmap_io_add_(base, ev->ev_fd, ev);
+			res = evmap_io_add_(base, ev->ev_fd, ev); /* io事件  */
 		else if (ev->ev_events & EV_SIGNAL)
-			res = evmap_signal_add_(base, (int)ev->ev_fd, ev);
+			res = evmap_signal_add_(base, (int)ev->ev_fd, ev); /* 信号事件 */
 		if (res != -1)
 			event_queue_insert_inserted(base, ev);
 		if (res == 1) {
@@ -3122,6 +3133,7 @@ out:
 }
 
 /* Activate every event whose timeout has elapsed. */
+/* 处理超时事件，将超时事件插入到激活链表中 */
 static void
 timeout_process(struct event_base *base)
 {
@@ -3380,7 +3392,7 @@ event_queue_insert_timeout(struct event_base *base, struct event *ev)
 		    get_common_timeout_list(base, &ev->ev_timeout);
 		insert_common_timeout_inorder(ctl, ev);
 	} else {
-		min_heap_push_(&base->timeheap, ev);
+		min_heap_push_(&base->timeheap, ev); /* 定时器数据组织 入堆 */
 	}
 }
 
@@ -3540,7 +3552,7 @@ evthread_notify_drain_eventfd(evutil_socket_t fd, short what, void *arg)
 		event_sock_warn(fd, "Error reading from eventfd");
 	}
 	EVBASE_ACQUIRE_LOCK(base, th_base_lock);
-	base->is_notify_pending = 0;
+	base->is_notify_pending = 0; 
 	EVBASE_RELEASE_LOCK(base, th_base_lock);
 }
 #endif
@@ -3597,7 +3609,7 @@ evthread_make_base_notifiable_nolock_(struct event_base *base)
 #endif
 
 #ifdef EVENT__HAVE_EVENTFD
-	base->th_notify_fd[0] = evutil_eventfd_(0,
+	base->th_notify_fd[0] = evutil_eventfd_(0, /* eventfd方式进行线程间通信 */
 	    EVUTIL_EFD_CLOEXEC|EVUTIL_EFD_NONBLOCK);
 	if (base->th_notify_fd[0] >= 0) {
 		base->th_notify_fd[1] = -1;
@@ -3605,7 +3617,7 @@ evthread_make_base_notifiable_nolock_(struct event_base *base)
 		cb = evthread_notify_drain_eventfd;
 	} else
 #endif
-	if (evutil_make_internal_pipe_(base->th_notify_fd) == 0) {
+	if (evutil_make_internal_pipe_(base->th_notify_fd) == 0) { /* 管道方式 */
 		notify = evthread_notify_base_default;
 		cb = evthread_notify_drain_default;
 	} else {
@@ -3615,12 +3627,13 @@ evthread_make_base_notifiable_nolock_(struct event_base *base)
 	base->th_notify_fn = notify;
 
 	/* prepare an event that we can use for wakeup */
+	/* 添加wakeup事件 */
 	event_assign(&base->th_notify, base, base->th_notify_fd[0],
 				 EV_READ|EV_PERSIST, cb, base);
 
 	/* we need to mark this as internal event */
 	base->th_notify.ev_flags |= EVLIST_INTERNAL;
-	event_priority_set(&base->th_notify, 0);
+	event_priority_set(&base->th_notify, 0); /* 设置最高优先级  */
 
 	return event_add_nolock_(&base->th_notify, NULL, 0);
 }
